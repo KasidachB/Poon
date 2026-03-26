@@ -11,7 +11,7 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
-// Make sure DB folder exists (important for Render)
+// Make sure DB folder exists
 const dataDir = path.join(__dirname, "data");
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
@@ -45,6 +45,7 @@ db.prepare(`
     politics_in_gaming TEXT,
     games_influence_politics INTEGER,
     important_political_issues TEXT,
+    political_spectrum TEXT,
 
     -- Demographics section
     age_group TEXT,
@@ -57,6 +58,17 @@ db.prepare(`
     submitted_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )
 `).run();
+
+// Ensure political_spectrum exists for older databases
+const columns = db.prepare(`PRAGMA table_info(survey_responses)`).all();
+const hasPoliticalSpectrum = columns.some(
+  (col) => col.name === "political_spectrum"
+);
+
+if (!hasPoliticalSpectrum) {
+  db.prepare(`ALTER TABLE survey_responses ADD COLUMN political_spectrum TEXT`).run();
+  console.log("✅ Added political_spectrum column to survey_responses");
+}
 
 // Health check route
 app.get("/", (req, res) => {
@@ -89,6 +101,7 @@ app.post("/api/submit-survey", (req, res) => {
         politics_in_gaming,
         games_influence_politics,
         important_political_issues,
+        political_spectrum,
 
         age_group,
         gender,
@@ -96,7 +109,7 @@ app.post("/api/submit-survey", (req, res) => {
         education_level,
         location,
         open_comments
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const result = stmt.run(
@@ -117,6 +130,7 @@ app.post("/api/submit-survey", (req, res) => {
       data.politics_in_gaming || "",
       data.games_influence_politics ?? null,
       data.important_political_issues || "",
+      data.political_spectrum || "",
 
       data.age_group || "",
       data.gender || "",
@@ -187,7 +201,7 @@ app.get("/export-csv", (req, res) => {
   }
 });
 
-// Optional browser table view
+// Browser table view
 app.get("/responses", (req, res) => {
   try {
     const rows = db.prepare("SELECT * FROM survey_responses ORDER BY id DESC").all();
@@ -211,6 +225,7 @@ app.get("/responses", (req, res) => {
         <td>${row.politics_in_gaming || ""}</td>
         <td>${row.games_influence_politics ?? ""}</td>
         <td>${row.important_political_issues || ""}</td>
+        <td>${row.political_spectrum || ""}</td>
         <td>${row.age_group || ""}</td>
         <td>${row.gender || ""}</td>
         <td>${row.occupation || ""}</td>
@@ -230,7 +245,7 @@ app.get("/responses", (req, res) => {
         <style>
           body { font-family: Arial, sans-serif; margin: 20px; background: #f8fafc; color: #111827; }
           .table-wrap { overflow-x: auto; background: white; border-radius: 12px; padding: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
-          table { border-collapse: collapse; min-width: 2200px; width: 100%; }
+          table { border-collapse: collapse; min-width: 2400px; width: 100%; }
           th, td { border: 1px solid #e5e7eb; padding: 8px 10px; text-align: left; vertical-align: top; font-size: 14px; }
           th { background: #111827; color: white; position: sticky; top: 0; }
           tr:nth-child(even) { background: #f9fafb; }
@@ -266,6 +281,7 @@ app.get("/responses", (req, res) => {
                 <th>Politics in Gaming</th>
                 <th>Games Influence Politics</th>
                 <th>Important Political Issues</th>
+                <th>Political Spectrum</th>
                 <th>Age Group</th>
                 <th>Gender</th>
                 <th>Occupation</th>
